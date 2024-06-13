@@ -1,9 +1,7 @@
-#![warn(clippy::all, rust_2018_idioms)]
-#![warn(non_snake_case)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 use app::Database;
 use rusqlite::Connection;
-use Simple_Security::*;
+use simple_security::*;
 
 fn create_tables() -> Result<(), rusqlite::Error> {
     let conn = Connection::open("C:/Users/jamie/passwords/data")?;

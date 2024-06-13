@@ -1,5 +1,5 @@
 [package]
-name = "Simple_Security"
+name = "simple_security"
 version = "0.1.0"
 authors = ["Jamie Watton"]
 edition = "2021"
