@@ -1,45 +1,46 @@
 #![warn(clippy::all, rust_2018_idioms)]
+#![warn(non_snake_case)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+use app::Database;
+use rusqlite::Connection;
+use Simple_Security::*;
+
+fn create_tables() -> Result<(), rusqlite::Error> {
+    let conn = Connection::open("C:/Users/jamie/passwords/data")?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS passwords (
+            id INTEGER PRIMARY KEY,
+            site TEXT NOT NULL,
+            password TEXT NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS master_password (
+            id INTEGER PRIMARY KEY,
+            password TEXT NOT NULL
+        )",
+        [],
+    )?;
+    Ok(())
+}
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
-fn main() -> eframe::Result<()> {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-
-    let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 300.0])
-            .with_min_inner_size([300.0, 220.0])
-            .with_icon(
-                // NOTE: Adding an icon is optional
-                eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
-                    .expect("Failed to load icon"),
-            ),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "eframe template",
-        native_options,
-        Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
-    )
-}
-
-// When compiling to web using trunk:
-#[cfg(target_arch = "wasm32")]
 fn main() {
-    // Redirect `log` message to `console.log` and friends:
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    let _ = create_tables();
+        
+    //todo. Bad practice. dotn store your key in the fucking source code
+    let key: Vec<u8> = Vec::from([
+        92, 44, 212, 25, 234, 193, 46, 94, 3, 243, 96, 140, 98, 42, 55, 228, 190, 114, 127, 117,
+        180, 126, 153, 37, 44, 140, 191, 115, 192, 249, 90, 71,
+    ]);
 
-    let web_options = eframe::WebOptions::default();
+    let options = eframe::NativeOptions::default();
 
-    wasm_bindgen_futures::spawn_local(async {
-        eframe::WebRunner::new()
-            .start(
-                "the_canvas_id", // hardcode it
-                web_options,
-                Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
-            )
-            .await
-            .expect("failed to start eframe");
-    });
+    let _ = eframe::run_native(
+        "Simple Security",
+        options,
+        Box::new(|_| Box::new(Database::new(key))),
+    );
 }

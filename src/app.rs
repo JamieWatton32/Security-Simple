@@ -1,109 +1,172 @@
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
-    label: String,
+use egui::{FontId, Response, RichText};
+use rusqlite::{Connection, Error as SqErr, Result};
+use crate::encryption::*;
 
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
+#[derive(serde::Deserialize, serde::Serialize, Default, Debug)]
+pub struct Database {
+    master: String,
+    key: Vec<u8>,
+    site: String,
+    password: String,
+    user_data: Vec<User>,
+    extracted_master: String,
+    passed_master_check: bool,
 }
 
-impl Default for TemplateApp {
-    fn default() -> Self {
+#[derive(serde::Deserialize, serde::Serialize, Default, Debug)]
+pub struct User {
+    pub site: String,
+    pub password: String,
+}
+#[derive(Debug)]
+pub enum DbErr {
+    DbErr(SqErr),
+    EncryptError,
+}
+
+impl From<SqErr> for DbErr {
+    fn from(s: SqErr) -> Self {
+        DbErr::DbErr(s)
+    }
+}
+
+impl Database {
+    pub fn new(key: Vec<u8>) -> Self {
         Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            key,
+            passed_master_check: false,
+            ..Default::default()
+        }
+    }
+
+    pub fn add(&self, site_name: &str, password: &str) -> Result<(), DbErr> {
+        let connection = Connection::open("C:/Users/jamie/passwords/data")?;
+        let encrypted_password = encryption::encrypt(password, &self.key);
+        let encrypted_password_hex = hex::encode(encrypted_password);
+        let mut db =
+            connection.prepare("INSERT INTO passwords (site, password) VALUES (?1, ?2);")?;
+        db.execute(rusqlite::params![site_name, encrypted_password_hex])?;
+        Ok(())
+    }
+
+    fn fetch_from_db(&mut self) -> Result<()> {
+        let conn = Connection::open("C:/Users/jamie/passwords/data")?;
+        let mut stmt = conn.prepare("SELECT site, password FROM passwords")?;
+        let user_iter = stmt.query_map([], |row| {
+            let encrypted_password_hex: String = row.get(1)?;
+            let encrypted_password = hex::decode(encrypted_password_hex).unwrap();
+            let decrypted_password = encryption::decrypt(&encrypted_password, &self.key);
+            Ok(User {
+                site: row.get(0)?,
+                password: decrypted_password,
+            })
+        })?;
+
+        self.user_data.clear();
+        for user in user_iter {
+            match user {
+                Ok(u) => self.user_data.push(u),
+                Err(e) => eprintln!("Error reading row: {:?}", e),
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn add_master(&self, password: &str) -> Result<(), DbErr> {
+        let connection = Connection::open("C:/Users/jamie/passwords/data")?;
+        let encrypted_password = encryption::encrypt(password, &self.key);
+        let encrypted_password_hex = hex::encode(encrypted_password);
+        let mut db =
+            connection.prepare("INSERT INTO master_password (id, password) VALUES (?1, ?2);")?;
+        db.execute(rusqlite::params![1, encrypted_password_hex])?;
+        Ok(())
+    }
+
+    fn check_master<'a>(&'a self, master_password: &'a str, key: &Vec<u8>) -> Result<&str> {
+        let connection = Connection::open("C:/Users/jamie/passwords/data")?;
+        let mut db = connection.prepare("SELECT password FROM master_password Where id = (?1);")?;
+        let mut rows = db.query(rusqlite::params![1])?;
+
+        if let Ok(Some(row)) = rows.next() {
+            let encrypted_password_hex: String = row.get(0)?;
+            let encrypted_password = hex::decode(encrypted_password_hex).unwrap();
+            let decrypted_password = encryption::decrypt(&encrypted_password, &key);
+            if decrypted_password == master_password {
+                Ok(master_password)
+            } else {
+                Ok("Passwords did not match.")
+            }
+        } else {
+            Ok("Query returned no result.")
+        }
+    }
+
+    pub fn extract_master(&self) -> String {
+        if let Ok(p) = self.check_master(&self.master, &self.key) {
+            p.to_owned()
+        } else {
+            String::from("Invalid Password!")
         }
     }
 }
 
-impl TemplateApp {
-    /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
-
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
-
-        Default::default()
-    }
-}
-
-impl eframe::App for TemplateApp {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
-
-    /// Called each time the UI needs repainting, which may be many times per second.
+impl eframe::App for Database {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
-
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-
-            egui::menu::bar(ui, |ui| {
-                // NOTE: no File->Quit on web pages!
-                let is_web = cfg!(target_arch = "wasm32");
-                if !is_web {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Quit").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                    });
-                    ui.add_space(16.0);
-                }
-
-                egui::widgets::global_dark_light_mode_buttons(ui);
-            });
-        });
-
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("eframe template");
+            let _ = self.add_master("test123"); // this will attempt to add the password, but silently fails if it already exists.
+            ui.heading("User Entry Application");
+
+            ui.label(RichText::new("Enter master password").font(FontId::proportional(40.0)));
+            let response: Response = ui
+                .add(egui::TextEdit::singleline(&mut self.master).font(FontId::proportional(20.0)));
+
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.extracted_master = self.extract_master();
+                if &self.extracted_master[..] == self.master {
+                    self.passed_master_check = true;
+                }
+                self.master.clear();
+            }
 
             ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(&mut self.label);
+                ui.heading("Enter Site name");
+                ui.text_edit_singleline(&mut self.site);
             });
 
-            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.value += 1.0;
+            ui.horizontal(|ui| {
+                ui.heading("Enter password for the above site");
+                ui.text_edit_singleline(&mut self.password);
+            });
+
+            if ui.button("Add to database").clicked() {
+                if let Err(err) = self.add(&self.site, &self.password) {
+                    eprintln!("Error saving to database: {:?}", err);
+                }
             }
 
             ui.separator();
+            if self.passed_master_check {
+                if let Err(err) = self.fetch_from_db() {
+                    eprintln!("Error fetching from database: {}", err);
+                }
+                ui.heading("Stored Data");
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for user in &self.user_data {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Site Name: {}", user.site))
+                                    .font(FontId::proportional(20.0)),
+                            );
 
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/main/",
-                "Source code."
-            ));
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
-                egui::warn_if_debug_build(ui);
-            });
+                            ui.label(
+                                RichText::new(format!("Password: {}", user.password))
+                                    .font(FontId::proportional(20.0)),
+                            );
+                        });
+                    }
+                });
+            }
         });
     }
-}
-
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
 }

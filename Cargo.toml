@@ -1,7 +1,7 @@
 [package]
-name = "eframe_template"
+name = "Simple_Security"
 version = "0.1.0"
-authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
+authors = ["Jamie Watton"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 rust-version = "1.76"
@@ -19,9 +19,15 @@ eframe = { version = "0.27.0", default-features = false, features = [
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
 log = "0.4"
+chacha20poly1305 = "0.10.1"
+hex = "0.4.3"
+passwords = "3.1.16"
+rusqlite = { version = "0.31.0", features = ["bundled"] }
+
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
+
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
