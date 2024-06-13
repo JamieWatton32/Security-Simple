@@ -2371,6 +2371,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "wasm-bindgen-futures",
+ "winapi",
 ]
 
 [[package]]

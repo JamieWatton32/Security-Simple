@@ -40,7 +40,7 @@ impl Database {
     }
 
     pub fn add(&self, site_name: &str, password: &str) -> Result<(), DbErr> {
-        let connection = Connection::open("C:/Users/jamie/passwords/data")?;
+        let connection = Connection::open("C:\\security_simple\\data")?;
         let encrypted_password = encryption::encrypt(password, &self.key);
         let encrypted_password_hex = hex::encode(encrypted_password);
         let mut db =
@@ -50,7 +50,7 @@ impl Database {
     }
 
     fn fetch_from_db(&mut self) -> Result<()> {
-        let conn = Connection::open("C:/Users/jamie/passwords/data")?;
+        let conn = Connection::open("C:\\security_simple\\data")?;
         let mut stmt = conn.prepare("SELECT site, password FROM passwords")?;
         let user_iter = stmt.query_map([], |row| {
             let encrypted_password_hex: String = row.get(1)?;
@@ -74,7 +74,7 @@ impl Database {
     }
 
     pub fn add_master(&self, password: &str) -> Result<(), DbErr> {
-        let connection = Connection::open("C:/Users/jamie/passwords/data")?;
+        let connection = Connection::open("C:\\security_simple\\data")?;
         let encrypted_password = encryption::encrypt(password, &self.key);
         let encrypted_password_hex = hex::encode(encrypted_password);
         let mut db =
@@ -84,7 +84,7 @@ impl Database {
     }
 
     fn check_master<'a>(&'a self, master_password: &'a str, key: &Vec<u8>) -> Result<&str> {
-        let connection = Connection::open("C:/Users/jamie/passwords/data")?;
+        let connection = Connection::open("C:\\security_simple\\data")?;
         let mut db = connection.prepare("SELECT password FROM master_password Where id = (?1);")?;
         let mut rows = db.query(rusqlite::params![1])?;
 

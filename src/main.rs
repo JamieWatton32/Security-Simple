@@ -1,10 +1,11 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+//#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 use app::Database;
 use rusqlite::Connection;
 use simple_security::*;
+use encryption::key::StoreKey;
 
 fn create_tables() -> Result<(), rusqlite::Error> {
-    let conn = Connection::open("C:/Users/jamie/passwords/data")?;
+    let conn = Connection::open("C:\\security_simple\\data")?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS passwords (
             id INTEGER PRIMARY KEY,
@@ -26,19 +27,29 @@ fn create_tables() -> Result<(), rusqlite::Error> {
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
+
+
     let _ = create_tables();
-        
-    //todo. Bad practice. dotn store your key in the fucking source code
-    let key: Vec<u8> = Vec::from([
-        92, 44, 212, 25, 234, 193, 46, 94, 3, 243, 96, 140, 98, 42, 55, 228, 190, 114, 127, 117,
-        180, 126, 153, 37, 44, 140, 191, 115, 192, 249, 90, 71,
-    ]);
+
+    let encryption_key = match StoreKey::retrieve_key(){
+        Some(encryption_key) => {
+            StoreKey::decrypt_data(&encryption_key)
+        }
+        None => {
+            let new_key = StoreKey::make_key();
+            let encrypted_key = StoreKey::encrypt_data(&new_key);
+            return StoreKey::store_key(&encrypted_key);
+            
+        } 
+    };
+    println!("Encryption Key: {:?}", encryption_key);
+    
 
     let options = eframe::NativeOptions::default();
 
     let _ = eframe::run_native(
         "Simple Security",
         options,
-        Box::new(|_| Box::new(Database::new(key))),
+        Box::new(|_| Box::new(Database::new(encryption_key))),
     );
 }

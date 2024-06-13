@@ -24,9 +24,11 @@ hex = "0.4.3"
 passwords = "3.1.16"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 
+winapi = { version = "0.3.9", features = ["dpapi"] }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
+
 
 
 # native:
