@@ -1,6 +1,6 @@
+use crate::encryption::*;
 use egui::{FontId, Response, RichText};
 use rusqlite::{Connection, Error as SqErr, Result};
-use crate::encryption::*;
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Debug)]
 pub struct Database {
@@ -115,11 +115,14 @@ impl eframe::App for Database {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let _ = self.add_master("test123"); // this will attempt to add the password, but silently fails if it already exists.
-            ui.heading("User Entry Application");
+            ui.heading(RichText::new("Enter master password"));
 
             ui.label(RichText::new("Enter master password").font(FontId::proportional(40.0)));
-            let response: Response = ui
-                .add(egui::TextEdit::singleline(&mut self.master).font(FontId::proportional(20.0)));
+
+            let response: Response = ui.add(egui::TextEdit::password(
+                egui::TextEdit::singleline(&mut self.master).font(FontId::proportional(20.0)),
+                true,
+            ));
 
             if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 self.extracted_master = self.extract_master();
@@ -128,20 +131,25 @@ impl eframe::App for Database {
                 }
                 self.master.clear();
             }
+            ui.separator();
+            //do not enable site/pw entry until mastpass is passed
+            if self.passed_master_check {
+                ui.is_enabled();
 
-            ui.horizontal(|ui| {
-                ui.heading("Enter Site name");
-                ui.text_edit_singleline(&mut self.site);
-            });
+                ui.horizontal(|ui| {
+                    ui.heading("Enter Site name");
+                    ui.text_edit_singleline(&mut self.site);
+                });
 
-            ui.horizontal(|ui| {
-                ui.heading("Enter password for the above site");
-                ui.text_edit_singleline(&mut self.password);
-            });
+                ui.horizontal(|ui| {
+                    ui.heading("Enter password for the above site");
+                    ui.text_edit_singleline(&mut self.password).enabled();
+                });
 
-            if ui.button("Add to database").clicked() {
-                if let Err(err) = self.add(&self.site, &self.password) {
-                    eprintln!("Error saving to database: {:?}", err);
+                if ui.button("Add to database").clicked() {
+                    if let Err(err) = self.add(&self.site, &self.password) {
+                        eprintln!("Error saving to database: {:?}", err);
+                    }
                 }
             }
 
