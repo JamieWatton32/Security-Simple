@@ -1,9 +1,13 @@
-//#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 use app::Database;
 use rusqlite::Connection;
 use simple_security::*;
 use encryption::key::StoreKey;
+fn make_directory()->std::io::Result<()>{
+        std::fs::create_dir("C:\\security_simple\\")?;
+        Ok(())
 
+}
 fn create_tables() -> Result<(), rusqlite::Error> {
     let conn = Connection::open("C:\\security_simple\\data")?;
     conn.execute(
@@ -28,7 +32,7 @@ fn create_tables() -> Result<(), rusqlite::Error> {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
 
-
+    let _ = make_directory();
     let _ = create_tables();
 
     let encryption_key = match StoreKey::retrieve_key(){
@@ -42,7 +46,7 @@ fn main() {
             
         } 
     };
-    println!("Encryption Key: {:?}", encryption_key);
+    
     
 
     let options = eframe::NativeOptions::default();
