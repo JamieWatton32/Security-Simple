@@ -1,5 +1,6 @@
 use crate::encryption::*;
 use egui::{FontId, Response, RichText};
+use key::StoreKey;
 use rusqlite::{Connection, Error as SqErr, Result};
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Debug)]
@@ -8,13 +9,18 @@ pub struct Database {
     key: Vec<u8>,
     site: String,
     password: String,
-    user_data: Vec<User>,
+    user_data: Vec<Decrypt>,
     extracted_master: String,
     passed_master_check: bool,
 }
+#[derive(Debug,serde::Deserialize, serde::Serialize,Default)]
+enum Passwords {
+    Master,
+    #[default] Regular,
+}
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Debug)]
-pub struct User {
+pub struct Decrypt {
     pub site: String,
     pub password: String,
 }
@@ -29,7 +35,11 @@ impl From<SqErr> for DbErr {
         DbErr::DbErr(s)
     }
 }
+fn decrypt_string(hex: String, key: &[u8]) -> Result<String> {
+    let encrypted_password = hex::decode(hex).unwrap();
 
+    Ok(encryption::decrypt(&encrypted_password, &key))
+}
 impl Database {
     pub fn new(key: Vec<u8>) -> Self {
         Self {
@@ -39,7 +49,7 @@ impl Database {
         }
     }
 
-    pub fn add(&self, site_name: &str, password: &str) -> Result<(), DbErr> {
+    pub fn add_regular(&self, site_name: &str, password: &str) -> Result<(), DbErr> {
         let connection = Connection::open("C:\\security_simple\\data")?;
         let encrypted_password = encryption::encrypt(password, &self.key);
         let encrypted_password_hex = hex::encode(encrypted_password);
@@ -50,23 +60,25 @@ impl Database {
     }
 
     fn fetch_from_db(&mut self) -> Result<()> {
-        let conn = Connection::open("C:\\security_simple\\data")?;
-        let mut stmt = conn.prepare("SELECT site, password FROM passwords")?;
-        let user_iter = stmt.query_map([], |row| {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT site, password FROM passwords")
+            .unwrap();
+        let mut user_iter = stmt.query_map([], |row| {
             let encrypted_password_hex: String = row.get(1)?;
-            let encrypted_password = hex::decode(encrypted_password_hex).unwrap();
-            let decrypted_password = encryption::decrypt(&encrypted_password, &self.key);
-            Ok(User {
-                site: row.get(0)?,
-                password: decrypted_password,
-            })
+            if let Ok(decrypted) = decrypt_string(encrypted_password_hex, &self.key) {
+                Ok(Decrypt {
+                    site: row.get(0)?,
+                    password: decrypted,
+                })
+            } else {
+                Err(SqErr::QueryReturnedNoRows)
+            }
         })?;
-
-        self.user_data.clear();
-        for user in user_iter {
+        for user in &mut user_iter {
             match user {
-                Ok(u) => self.user_data.push(u),
-                Err(e) => eprintln!("Error reading row: {:?}", e),
+                Ok(user) => self.user_data.push(user),
+                Err(error) => eprintln!("Error reading row: {:?}", error),
             }
         }
 
@@ -75,6 +87,7 @@ impl Database {
 
     pub fn add_master(&self, password: &str) -> Result<(), DbErr> {
         let connection = Connection::open("C:\\security_simple\\data")?;
+        
         let encrypted_password = encryption::encrypt(password, &self.key);
         let encrypted_password_hex = hex::encode(encrypted_password);
         let mut db =
@@ -90,12 +103,18 @@ impl Database {
 
         if let Ok(Some(row)) = rows.next() {
             let encrypted_password_hex: String = row.get(0)?;
-            let encrypted_password = hex::decode(encrypted_password_hex).unwrap();
-            let decrypted_password = encryption::decrypt(&encrypted_password, &key);
-            if decrypted_password == master_password {
-                Ok(master_password)
-            } else {
-                Ok("Passwords did not match.")
+
+            let decrypted_password = decrypt_string(encrypted_password_hex, &self.key);
+
+            match decrypted_password {
+                Ok(d) => {
+                    if d.as_str() == master_password {
+                        return Ok(master_password);
+                    } else {
+                        Ok("Passwords did not match.")
+                    }
+                }
+                Err(_) => return Ok("Passwords did not match."),
             }
         } else {
             Ok("Query returned no result.")
@@ -129,7 +148,6 @@ impl eframe::App for Database {
                 if &self.extracted_master[..] == self.master {
                     self.passed_master_check = true;
                 }
-                self.master.clear();
             }
             ui.separator();
             //do not enable site/pw entry until mastpass is passed
@@ -147,13 +165,14 @@ impl eframe::App for Database {
                 });
 
                 if ui.button("Add to database").clicked() {
-                    if let Err(err) = self.add(&self.site, &self.password) {
+                    if let Err(err) = self.add_regular(&self.site, &self.password) {
                         eprintln!("Error saving to database: {:?}", err);
                     }
                 }
             }
 
             ui.separator();
+            self.user_data.clear();
             if self.passed_master_check {
                 if let Err(err) = self.fetch_from_db() {
                     eprintln!("Error fetching from database: {}", err);
