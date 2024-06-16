@@ -3,6 +3,7 @@ use chacha20poly1305::aead::generic_array::GenericArray;
 use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng};
 use chacha20poly1305::ChaCha20Poly1305;
 
+
 pub fn generate_key() -> Vec<u8> {
     ChaCha20Poly1305::generate_key(&mut OsRng).to_vec()
 }
@@ -22,4 +23,9 @@ pub fn decrypt(obsf: &[u8], key: &[u8]) -> String {
     let nonce = GenericArray::from_slice(nonce);
     let plaintext = cipher.decrypt(nonce, ciphertext).unwrap();
     String::from_utf8(plaintext).unwrap()
+}
+
+pub fn decrypt_string(hex: String, key: &[u8]) -> Result<String,rusqlite::Error> {
+    let encrypted_password = hex::decode(hex).unwrap();
+    Ok(decrypt(&encrypted_password, &key))
 }

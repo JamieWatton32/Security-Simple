@@ -31,29 +31,18 @@ fn create_tables() -> Result<(), rusqlite::Error> {
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
+    use key::Key;
+
+
 
     let _ = make_directory();
     let _ = create_tables();
 
-    let encryption_key = match StoreKey::retrieve_key(){
-        Some(encryption_key) => {
-            StoreKey::decrypt_data(&encryption_key)
-        }
-        None => {
-            let new_key = StoreKey::make_key();
-            let encrypted_key = StoreKey::encrypt_data(&new_key);
-            return StoreKey::store_key(&encrypted_key);
-            
-        } 
-    };
-    
-    
-
     let options = eframe::NativeOptions::default();
-
+    let key = Key::retrieve_key();
     let _ = eframe::run_native(
         "Simple Security",
         options,
-        Box::new(|_| Box::new(Database::new(encryption_key))),
+        Box::new(|_| Box::new(Database::new(key))),
     );
 }
