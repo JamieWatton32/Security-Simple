@@ -1,10 +1,6 @@
 use egui::{FontId, Response, RichText};
-use rusqlite::types::FromSqlError;
 
-use crate::{
-    areas::{DbErr, MasterArea, RegularArea},
-    key::Key,
-};
+use crate::{key::Key, master::MasterArea, regular::RegularArea};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Database {
@@ -15,12 +11,11 @@ pub struct Database {
 }
 
 //For keepign track of the current string inside of text boxs,
-//needed because e
+//needed because loops and  stuff
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Inputs {
     site_current: String,
     password_current: String,
-
 }
 impl Inputs {
     fn empty() -> Inputs {
@@ -45,7 +40,7 @@ impl Database {
 impl eframe::App for Database {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         //checks if MP already exists. If not then gets user to create one.
-        if !self.master.master_exists(){
+        if !self.master.master_exists() {
             egui::TopBottomPanel::top("my_panel").show(ctx, |ui| {
                 ui.label(
                     RichText::new("Please create masterword.").font(FontId::proportional(40.0)),
@@ -76,10 +71,9 @@ impl eframe::App for Database {
                 }
             });
         }
-        
-        egui::CentralPanel::default().show(ctx, |ui| {
 
-            //MP entry. 
+        egui::CentralPanel::default().show(ctx, |ui| {
+            //MP entry.
             if !self.master.passed && self.master.master_exists() {
                 ui.label(RichText::new("Enter master password").font(FontId::proportional(40.0)));
                 let response: Response = ui.add(egui::TextEdit::password(
