@@ -1,4 +1,3 @@
-//Contains program key.
 
 use crate::encryption::key::StoreKey;
 
@@ -8,6 +7,8 @@ pub struct Key{
 }
 
 impl Key{
+    //Retrieves program key, if key does not yet exist one is created
+
     pub fn retrieve_key() -> Self{
         
         let encryption_key = match StoreKey::retrieve_key() {
