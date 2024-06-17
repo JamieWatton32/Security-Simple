@@ -20,14 +20,13 @@ pub struct Database {
 pub struct Inputs {
     site_current: String,
     password_current: String,
-    master_current: String,
+
 }
 impl Inputs {
     fn empty() -> Inputs {
         Inputs {
             site_current: String::new(),
             password_current: String::new(),
-            master_current: String::new(),
         }
     }
 }
@@ -45,8 +44,9 @@ impl Database {
 
 impl eframe::App for Database {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if !self.master.created {
+        //checks if MP already exists. If not then gets user to create one.
+        if !self.master.master_exists(){
+            egui::TopBottomPanel::top("my_panel").show(ctx, |ui| {
                 ui.label(
                     RichText::new("Please create masterword.").font(FontId::proportional(40.0)),
                 );
@@ -65,7 +65,6 @@ impl eframe::App for Database {
                                 RichText::new("Created succesfully!")
                                     .font(FontId::proportional(40.0)),
                             );
-                            self.master.created = true;
                         }
                         Err(_) => {
                             ui.label(
@@ -75,9 +74,13 @@ impl eframe::App for Database {
                         }
                     }
                 }
-            }
+            });
+        }
+        
+        egui::CentralPanel::default().show(ctx, |ui| {
 
-            if !self.master.passed && self.master.created {
+            //MP entry. 
+            if !self.master.passed && self.master.master_exists() {
                 ui.label(RichText::new("Enter master password").font(FontId::proportional(40.0)));
                 let response: Response = ui.add(egui::TextEdit::password(
                     egui::TextEdit::singleline(&mut self.master.password)

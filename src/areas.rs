@@ -1,7 +1,9 @@
 use crate::encryption::encryption;
+use rusqlite::params;
 use rusqlite::Connection;
 use rusqlite::Error as SqErr;
-
+use rusqlite::MappedRows;
+use rusqlite::Row;
 
 use crate::{encryption::encryption::*, key::Key};
 
@@ -23,7 +25,6 @@ pub struct MasterArea {
     pub key: Vec<u8>,
     pub password: String,
     pub passed: bool,
-    pub created: bool,
 }
 
 //contains data for site/pw section
@@ -43,49 +44,25 @@ impl RegularArea {
             sites: Vec::new(),
         }
     }
-    pub fn add_regular(&self, site_name: &str, password: &str) -> Result<(), rusqlite::Error> {
+    pub fn add_regular(&self, site_name: &str, password: &str) -> Result<(), SqErr> {
         let conn = Connection::open("C:\\security_simple\\data").unwrap();
         let encryption_key = &self.key;
-        let encrypted_password = encrypt(&password, &encryption_key);
-        let encrypted_password_hex = hex::encode(encrypted_password);
+        let (epassword, esite) = (
+            encrypt(&password, &encryption_key),
+            encrypt(&site_name, &encryption_key),
+        );
+
+        let (site_hex, password_hex) = (hex::encode(esite), hex::encode(epassword));
+
         let mut db = conn.prepare("INSERT INTO passwords (site, password) VALUES (?1, ?2);")?;
-        db.execute(rusqlite::params![site_name, encrypted_password_hex])?;
+        db.execute(rusqlite::params![site_hex, password_hex])?;
         Ok(())
     }
-
-    fn fetch_sites(&self) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = Connection::open("C:\\security_simple\\data").unwrap();
-        let mut stmt = conn.prepare("SELECT site FROM passwords")?;
-        let site_iter = stmt.query_map([], |row| {
-            let site: String = row.get(0)?;
-            Ok(site)
-        });
-
-        let mut sites_iter = Vec::new();
-        match site_iter {
-            Ok(e) => {
-                for each in e {
-                    match each {
-                        Ok(s) => {
-                            sites_iter.push(s);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        Ok(sites_iter)
-    }
-    fn fetch_passwords(&self) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = Connection::open("C:\\security_simple\\data").unwrap();
-        let mut stmt = conn.prepare("SELECT password FROM passwords").unwrap();
-        let encrypted_iter = stmt.query_map([], |row| {
-            let password: String = row.get(0)?;
-            Ok(password)
-        });
-
+    //yes this is a horrible definition, too bad.
+    fn build_decrypted_array(
+        &mut self,
+        encrypted_iter: Result<MappedRows<impl FnMut(&Row) -> Result<String, SqErr>>, SqErr>,
+    ) -> Vec<String> {
         let mut decrypted_iter = Vec::new();
         match encrypted_iter {
             Ok(e) => {
@@ -102,8 +79,34 @@ impl RegularArea {
             }
             _ => {}
         }
+        decrypted_iter
+    }
 
-        Ok(decrypted_iter)
+    fn fetch_sites(&mut self) -> Result<Vec<String>, SqErr> {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn.prepare("SELECT site FROM passwords")?;
+        let site_iter = stmt.query_map([], |row| {
+            let site: String = row.get(0)?;
+            Ok(site)
+        });
+
+        let sites = self.build_decrypted_array(site_iter);
+
+        Ok(sites)
+    }
+
+    fn fetch_passwords(&mut self) -> Result<Vec<String>, SqErr> {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn.prepare("SELECT password FROM passwords").unwrap();
+
+        let encrypted_iter = stmt.query_map([], |row| {
+            let password: String = row.get(0)?;
+            Ok(password)
+        });
+
+        let passwords = self.build_decrypted_array(encrypted_iter);
+
+        Ok(passwords)
     }
 
     pub fn fetch_from_db(&mut self) -> Result<(), String> {
@@ -121,7 +124,7 @@ impl RegularArea {
         Ok(())
     }
 
-    pub fn generate_password(&self)-> String{
+    pub fn generate_password(&self) -> String {
         use passwords::PasswordGenerator;
         let pg = PasswordGenerator::new()
             .length(16)
@@ -132,12 +135,10 @@ impl RegularArea {
             .spaces(true)
             .exclude_similar_characters(true)
             .strict(true);
-        
+
         pg.generate_one().unwrap()
     }
-    
 }
-
 
 impl MasterArea {
     pub fn new() -> Self {
@@ -146,11 +147,10 @@ impl MasterArea {
             key,
             password: String::new(),
             passed: false,
-            created:false,
         }
     }
 
-    pub fn add_master(&self, password: &str) -> Result<(), rusqlite::Error> {
+    pub fn add_master(&self, password: &str) -> Result<(), SqErr> {
         let connection = Connection::open("C:\\security_simple\\data")?;
 
         let encrypted_password = encryption::encrypt(password, &self.key);
@@ -161,7 +161,7 @@ impl MasterArea {
         Ok(())
     }
 
-    fn check_master<'a>(&'a self, master_password: &'a str) -> Result<&str, rusqlite::Error> {
+    fn check_master<'a>(&'a self, master_password: &'a str) -> Result<&str, SqErr> {
         let connection = Connection::open("C:\\security_simple\\data")?;
         let mut db = connection.prepare("SELECT password FROM master_password Where id = (?1);")?;
         let mut rows = db.query(rusqlite::params![1])?;
@@ -194,4 +194,13 @@ impl MasterArea {
         }
     }
 
+    pub fn master_exists(&self) -> bool {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT EXISTS(SELECT 1 FROM master_password WHERE id = ?)")
+            .unwrap();
+        let exists: bool = stmt.query_row(params![1], |row| row.get(0)).unwrap();
+
+        exists
+    }
 }
