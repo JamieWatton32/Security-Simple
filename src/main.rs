@@ -2,7 +2,6 @@
 use app::Database;
 use rusqlite::Connection;
 use simple_security::*;
-use encryption::key::StoreKey;
 fn make_directory()->std::io::Result<()>{
         std::fs::create_dir("C:\\security_simple\\")?;
         Ok(())
@@ -32,9 +31,6 @@ fn create_tables() -> Result<(), rusqlite::Error> {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
     use key::Key;
-
-
-
     let _ = make_directory();
     let _ = create_tables();
 
