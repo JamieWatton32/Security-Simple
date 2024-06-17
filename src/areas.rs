@@ -2,6 +2,7 @@ use crate::encryption::encryption;
 use rusqlite::Connection;
 use rusqlite::Error as SqErr;
 
+
 use crate::{encryption::encryption::*, key::Key};
 
 #[derive(Debug)]
@@ -22,6 +23,7 @@ pub struct MasterArea {
     pub key: Vec<u8>,
     pub password: String,
     pub passed: bool,
+    pub created: bool,
 }
 
 //contains data for site/pw section
@@ -118,7 +120,24 @@ impl RegularArea {
         }
         Ok(())
     }
+
+    pub fn generate_password(&self)-> String{
+        use passwords::PasswordGenerator;
+        let pg = PasswordGenerator::new()
+            .length(16)
+            .numbers(true)
+            .lowercase_letters(true)
+            .uppercase_letters(true)
+            .symbols(true)
+            .spaces(true)
+            .exclude_similar_characters(true)
+            .strict(true);
+        
+        pg.generate_one().unwrap()
+    }
+    
 }
+
 
 impl MasterArea {
     pub fn new() -> Self {
@@ -127,10 +146,11 @@ impl MasterArea {
             key,
             password: String::new(),
             passed: false,
+            created:false,
         }
     }
 
-    pub fn add_master(&self, password: &str) -> Result<(), DbErr> {
+    pub fn add_master(&self, password: &str) -> Result<(), rusqlite::Error> {
         let connection = Connection::open("C:\\security_simple\\data")?;
 
         let encrypted_password = encryption::encrypt(password, &self.key);
@@ -173,4 +193,5 @@ impl MasterArea {
             String::from("Invalid Password!")
         }
     }
+
 }
