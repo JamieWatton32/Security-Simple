@@ -114,12 +114,12 @@ impl RegularArea {
     pub fn generate_password(&self) -> String {
         use passwords::PasswordGenerator;
         let pg = PasswordGenerator::new()
-            .length(16)
+            .length(6)
             .numbers(true)
             .lowercase_letters(true)
             .uppercase_letters(true)
             .symbols(true)
-            .spaces(true)
+            .spaces(false)
             .exclude_similar_characters(true)
             .strict(true);
 

@@ -35,58 +35,76 @@ impl Database {
             inputs: Inputs::empty(),
         }
     }
+    fn create_master(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::top("my_panel").show(ctx, |ui| {
+            ui.label(RichText::new("Please create masterword.").font(FontId::proportional(40.0)));
+            ui.label(
+                RichText::new("If lost there is no way to recover this!")
+                    .font(FontId::proportional(40.0)),
+            );
+            let response_mp: Response = ui.add(
+                egui::TextEdit::singleline(&mut self.master.password)
+                    .font(FontId::proportional(20.0)),
+            );
+            if response_mp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                match self.master.add_master(&self.master.password) {
+                    Ok(_) => {
+                        ui.label(
+                            RichText::new("Created succesfully!").font(FontId::proportional(40.0)),
+                        );
+                    }
+                    Err(_) => {
+                        ui.label(
+                            RichText::new("Incorrect password. Try again!")
+                                .font(FontId::proportional(40.0)),
+                        );
+                    }
+                }
+            }
+        });
+    }
+
+    fn enter_master(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("Enter master password").font(FontId::proportional(40.0)));
+        let response: Response = ui.add(egui::TextEdit::password(
+            egui::TextEdit::singleline(&mut self.master.password).font(FontId::proportional(20.0)),
+            true,
+        ));
+
+        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if self.master.extract_master() == self.master.password {
+                self.master.passed = true;
+            }
+        }
+    }
+
+    fn password_entry(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.heading("Enter password for the above site");
+            if ui
+                .button(RichText::new("Generate random password?").font(FontId::proportional(10.0)))
+                .clicked()
+            {
+                self.inputs.password_current =
+                    self.regular.generate_password() + "-" + &self.regular.generate_password();
+            } else {
+                ui.text_edit_singleline(&mut self.inputs.password_current);
+            }
+        });
+    }
 }
 
 impl eframe::App for Database {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         //checks if MP already exists. If not then gets user to create one.
         if !self.master.master_exists() {
-            egui::TopBottomPanel::top("my_panel").show(ctx, |ui| {
-                ui.label(
-                    RichText::new("Please create masterword.").font(FontId::proportional(40.0)),
-                );
-                ui.label(
-                    RichText::new("If lost there is no way to recover this!")
-                        .font(FontId::proportional(40.0)),
-                );
-                let response_mp: Response = ui.add(
-                    egui::TextEdit::singleline(&mut self.master.password)
-                        .font(FontId::proportional(20.0)),
-                );
-                if response_mp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    match self.master.add_master(&self.master.password) {
-                        Ok(_) => {
-                            ui.label(
-                                RichText::new("Created succesfully!")
-                                    .font(FontId::proportional(40.0)),
-                            );
-                        }
-                        Err(_) => {
-                            ui.label(
-                                RichText::new("Incorrect password. Try again!")
-                                    .font(FontId::proportional(40.0)),
-                            );
-                        }
-                    }
-                }
-            });
+            self.create_master(ctx);
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             //MP entry.
             if !self.master.passed && self.master.master_exists() {
-                ui.label(RichText::new("Enter master password").font(FontId::proportional(40.0)));
-                let response: Response = ui.add(egui::TextEdit::password(
-                    egui::TextEdit::singleline(&mut self.master.password)
-                        .font(FontId::proportional(20.0)),
-                    true,
-                ));
-
-                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    if self.master.extract_master() == self.master.password {
-                        self.master.passed = true;
-                    }
-                }
+                self.enter_master(ui);
             }
 
             ui.separator();
@@ -99,31 +117,13 @@ impl eframe::App for Database {
                     ui.text_edit_singleline(&mut self.inputs.site_current);
                 });
 
-                ui.horizontal(|ui| {
-                    ui.heading("Enter password for the above site");
-                    if ui
-                        .button(
-                            RichText::new("Generate random password?")
-                                .font(FontId::proportional(10.0)),
-                        )
-                        .clicked()
-                    {
-                        self.inputs.password_current = self.regular.generate_password()
-                            + "-"
-                            + &self.regular.generate_password();
-                    } else {
-                        ui.text_edit_singleline(&mut self.inputs.password_current);
-                    }
-                });
+                self.password_entry(ui);
 
-                if ui
-                    .button(RichText::new("Add password!").font(FontId::proportional(20.0)))
-                    .clicked()
+                if ui.button(RichText::new("Add password!").font(FontId::proportional(20.0))).clicked()
                 {
-                    if let Err(err) = self
-                        .regular
-                        .add_regular(&self.inputs.site_current, &self.inputs.password_current)
-                    {
+                    let (site_name, pass_entry) =
+                        (&self.inputs.site_current, &self.inputs.password_current);
+                    if let Err(err) = self.regular.add_regular(site_name, pass_entry) {
                         eprintln!("Error saving to database: {:?}", err);
                     }
                 }
