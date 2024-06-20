@@ -209,6 +209,7 @@ impl eframe::App for Database {
 
             ui.separator();
             self.regular.sites.clear();
+            self.regular.ids.clear();
             self.regular.passwords.clear();
             if self.master.passed {
                 if let Err(err) = self.regular.fetch_from_db() {
