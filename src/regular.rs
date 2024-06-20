@@ -1,8 +1,7 @@
-
-use rusqlite::Connection;
 use rusqlite::Error as SqErr;
 use rusqlite::MappedRows;
 use rusqlite::Row;
+use rusqlite::{params, Connection, Result};
 
 use crate::{encryption::encryption::*, key::Key};
 
@@ -24,8 +23,10 @@ pub struct RegularArea {
     key: Vec<u8>,
     pub passwords: Vec<String>,
     pub sites: Vec<String>,
+    pub ids: Vec<i32>,
 }
 
+//Publics
 impl RegularArea {
     pub fn new() -> Self {
         let key = Key::retrieve_key().hex;
@@ -33,6 +34,7 @@ impl RegularArea {
             key,
             passwords: Vec::new(),
             sites: Vec::new(),
+            ids: Vec::new(),
         }
     }
     pub fn add_regular(&self, site_name: &str, password: &str) -> Result<(), SqErr> {
@@ -46,10 +48,96 @@ impl RegularArea {
         let (site_hex, password_hex) = (hex::encode(esite), hex::encode(epassword));
 
         let mut db = conn.prepare("INSERT INTO passwords (site, password) VALUES (?1, ?2);")?;
-        db.execute(rusqlite::params![site_hex, password_hex])?;
+        db.execute(params![site_hex, password_hex])?;
         Ok(())
     }
-    //yes this is a horrible definition, too bad.
+
+    pub fn fetch_from_db(&mut self) -> Result<(), String> {
+        if let Ok(sites) = self.fetch_sites() {
+            for site in sites {
+                self.sites.push(site);
+            }
+        }
+        if let Ok(passwords) = self.fetch_passwords() {
+            for pw in passwords {
+                self.passwords.push(pw);
+            }
+        }
+        if let Ok(ids) = self.fetch_ids() {
+            for i in ids {
+                self.ids.push(i);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn generate_password(&self) -> String {
+        use passwords::PasswordGenerator;
+        let pg = PasswordGenerator::new()
+            .length(6)
+            .numbers(true)
+            .lowercase_letters(true)
+            .uppercase_letters(true)
+            .symbols(true)
+            .spaces(false)
+            .exclude_similar_characters(true)
+            .strict(true);
+
+        pg.generate_one().unwrap()
+    }
+
+    pub fn remove_entry(&self, id: usize) -> Result<usize> {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn
+            .prepare("DELETE FROM passwords WHERE ID = ?1;")
+            .unwrap();
+
+        match stmt.execute(params![id]) {
+            Ok(rows_affected) => Ok(rows_affected),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+//Internals
+impl RegularArea {
+    fn fetch_passwords(&mut self) -> Result<Vec<String>, SqErr> {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn.prepare("SELECT password FROM passwords").unwrap();
+        let encrypted_iter = stmt.query_map([], |row| {
+            let password: String = row.get(0)?;
+            Ok(password)
+        });
+        let passwords = self.build_decrypted_array(encrypted_iter);
+        Ok(passwords)
+    }
+
+    fn fetch_sites(&mut self) -> Result<Vec<String>, SqErr> {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn.prepare("SELECT site FROM passwords")?;
+        let site_iter = stmt.query_map([], |row| {
+            let site: String = row.get(0)?;
+            Ok(site)
+        });
+
+        let sites = self.build_decrypted_array(site_iter);
+
+        Ok(sites)
+    }
+
+    fn fetch_ids(&mut self) -> Result<Vec<i32>> {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM passwords")?;
+        let mut rows = stmt.query(params![])?;
+
+        let mut ids = Vec::new();
+        while let Some(row) = rows.next()? {
+            let id: i32 = row.get(0)?;
+            ids.push(id);
+        }
+        Ok(ids)
+    }
+
     fn build_decrypted_array(
         &mut self,
         encrypted_iter: Result<MappedRows<impl FnMut(&Row) -> Result<String, SqErr>>, SqErr>,
@@ -72,58 +160,4 @@ impl RegularArea {
         }
         decrypted_iter
     }
-
-    fn fetch_sites(&mut self) -> Result<Vec<String>, SqErr> {
-        let conn = Connection::open("C:\\security_simple\\data").unwrap();
-        let mut stmt = conn.prepare("SELECT site FROM passwords")?;
-        let site_iter = stmt.query_map([], |row| {
-            let site: String = row.get(0)?;
-            Ok(site)
-        });
-
-        let sites = self.build_decrypted_array(site_iter);
-
-        Ok(sites)
-    }
-
-    fn fetch_passwords(&mut self) -> Result<Vec<String>, SqErr> {
-        let conn = Connection::open("C:\\security_simple\\data").unwrap();
-        let mut stmt = conn.prepare("SELECT password FROM passwords").unwrap();
-        let encrypted_iter = stmt.query_map([], |row| {
-            let password: String = row.get(0)?;
-            Ok(password)
-        });
-        let passwords = self.build_decrypted_array(encrypted_iter);
-        Ok(passwords)
-    }
-
-    pub fn fetch_from_db(&mut self) -> Result<(), String> {
-        if let Ok(sites) = self.fetch_sites() {
-            for site in sites {
-                self.sites.push(site);
-            }
-        }
-        if let Ok(passwords) = self.fetch_passwords() {
-            for pw in passwords {
-                self.passwords.push(pw);
-            }
-        }
-        Ok(())
-    }
-
-    pub fn generate_password(&self) -> String {
-        use passwords::PasswordGenerator;
-        let pg = PasswordGenerator::new()
-            .length(6)
-            .numbers(true)
-            .lowercase_letters(true)
-            .uppercase_letters(true)
-            .symbols(true)
-            .spaces(false)
-            .exclude_similar_characters(true)
-            .strict(true);
-
-        pg.generate_one().unwrap()
-    }
 }
-

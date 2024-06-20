@@ -8,11 +8,12 @@ use crate::{encryption::encryption::*, key::Key};
 //Contains data for master section
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct MasterArea {
-    pub key: Vec<u8>,
+    key: Vec<u8>,
     pub password: String,
     pub passed: bool,
 }
 
+//Publics
 impl MasterArea {
     pub fn new() -> Self {
         let key = Key::retrieve_key().hex;
@@ -34,6 +35,27 @@ impl MasterArea {
         Ok(())
     }
 
+    pub fn extract_master(&self) -> String {
+        if let Ok(p) = self.check_master(&self.password) {
+            p.to_owned()
+        } else {
+            String::from("Invalid Password!")
+        }
+    }
+
+    pub fn master_exists(&self) -> bool {
+        let conn = Connection::open("C:\\security_simple\\data").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT EXISTS(SELECT 1 FROM master_password WHERE id = ?)")
+            .unwrap();
+        let exists: bool = stmt.query_row(params![1], |row| row.get(0)).unwrap();
+
+        exists
+    }
+}
+
+//Internals
+impl MasterArea {
     fn check_master<'a>(&'a self, master_password: &'a str) -> Result<&str, SqErr> {
         let connection = Connection::open("C:\\security_simple\\data")?;
         let mut db = connection.prepare("SELECT password FROM master_password Where id = (?1);")?;
@@ -57,23 +79,5 @@ impl MasterArea {
         } else {
             Ok("Query returned no result.")
         }
-    }
-
-    pub fn extract_master(&self) -> String {
-        if let Ok(p) = self.check_master(&self.password) {
-            p.to_owned()
-        } else {
-            String::from("Invalid Password!")
-        }
-    }
-
-    pub fn master_exists(&self) -> bool {
-        let conn = Connection::open("C:\\security_simple\\data").unwrap();
-        let mut stmt = conn
-            .prepare("SELECT EXISTS(SELECT 1 FROM master_password WHERE id = ?)")
-            .unwrap();
-        let exists: bool = stmt.query_row(params![1], |row| row.get(0)).unwrap();
-
-        exists
     }
 }
